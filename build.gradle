@@ -1,0 +1,47 @@
+plugins {
+    id 'zendesk.java11' version "$zendeskPluginsVersion"
+    id 'zendesk.app' version "$zendeskPluginsVersion"
+    
+    id 'zendesk.testing' version "$zendeskPluginsVersion"
+    id "io.freefair.lombok" version "5.2.1"
+    id 'idea'
+    id 'eclipse'
+}
+
+group 'com.zendesk'
+version '1.0-SNAPSHOT'
+
+application {
+    mainClassName="com.zendesk.ServiceStarter"
+}
+
+dependencies {
+    compileOnly 'org.projectlombok:lombok:1.18.12'
+    compile platform("com.zendesk:support-starter-dependencies:$zendeskStarterVersion")
+    compile "com.zendesk:support-vertx-framework:$zendeskStarterVersion"
+    
+    compile "com.zendesk:support-vertx-kafka:$zendeskStarterVersion"
+    
+    compile "com.zendesk:support-vertx-http:$zendeskStarterVersion"
+}
+
+shadowJar {
+    zip64 true
+    archiveFileName = 'kafka-test.jar'
+}
+
+test {
+    environment "JAVA_ENV", "test"
+    
+}
+
+// --------------- zendesk plugin configuration ---------------
+// https://github.com/zendesk/java-starter-plugins#zendesknitpick
+nitpick {
+    strict = true
+    errorprone = true
+}
+
+zendeskTesting {
+    vertxVersion = "$vertxVersion"
+}

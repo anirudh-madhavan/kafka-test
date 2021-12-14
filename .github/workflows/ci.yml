@@ -1,0 +1,95 @@
+name: CI
+
+on: push
+env:
+    # Test Config
+    ZD_GRADLE_OPTS: '-x shadowJar --console=plain'
+    JAVA_ENV: ci
+    ARTIFACTORY_API_KEY: "${{ secrets.ARTIFACTORY_API_KEY }}"
+    ARTIFACTORY_USERNAME: "${{ secrets.ARTIFACTORY_USERNAME }}"
+    # App config
+    VERSION: test
+
+jobs:
+  test:
+    name: ${{ matrix.task.name }}
+    runs-on:
+      - self-hosted
+      - zendesk-stable
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      matrix:
+        task:
+          - name: Style Check
+            command: nitpick
+          - name: Unit Tests
+            command: test --rerun-tasks
+        allow_failure: [ false ]
+    steps:
+      - uses: zendesk/checkout@v2
+
+      - uses: zendesk/setup-java@v1
+        with:
+          java-version: '11'
+
+      - uses: zendesk/cache@v2
+        with:
+          path: |
+            ~/.gradle/wrapper/
+            ~/.gradle/caches/
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle/{caches,wrapper}*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Run ${{ matrix.task.name }}
+        continue-on-error: ${{ matrix.allow_failure }}
+        run: ./gradlew ${{ matrix.task.command }} $ZD_GRADLE_OPTS
+  sonarqube:
+    needs: [ test ]
+    runs-on:
+      - self-hosted
+      - zendesk-stable
+    steps:
+      - uses: zendesk/checkout@v2
+      - uses: zendesk/setup-java@v1
+        with:
+          java-version: '11'
+      - name: Cache SonarQube Scan
+        uses: zendesk/cache@v2
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonarqube-${{ hashFiles('**/*.jar') }}
+          restore-keys: |
+            ${{ runner.os }}-sonarqube-
+      - name: Compile
+        run: ./gradlew assemble -x check -x nitpick -x javadoc -x shadowDistTar $ZD_GRADLE_OPTS
+      - name: SonarQube Scan On Push
+        run: |
+          sonar-scanner \
+          -Dsonar.host.url=${{ secrets.SONARQUBE_HOST }} \
+          -Dsonar.login=${{ secrets.SONARQUBE_TOKEN }} \
+          -Dsonar.branch.name=${{ github.ref }} \
+          -Dsonar.projectVersion=${{ steps.get_version.outputs.version }} \
+          -Dsonar.sourceEncoding=UTF-8
+  snyk:
+    runs-on: zendesk-stable
+    env:
+      ARTIFACTORY_API_KEY: ${{ secrets.ARTIFACTORY_API_KEY }}
+      ARTIFACTORY_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+    steps:
+      - name: Set env repo_name
+        run:
+          echo "repo_name=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
+      - uses: zendesk/checkout@master
+        with:
+          path: ${{ env.repo_name }}
+      - uses: zendesk/snyk_actions/setup@master
+      - uses: zendesk/setup-java@v1
+        with:
+          java-version: '11'
+      - name: Snyk vulnerability scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        working-directory: ${{ env.repo_name }}
+        run:
+          snyk monitor --all-sub-projects

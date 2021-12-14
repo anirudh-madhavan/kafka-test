@@ -1,0 +1,15 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        maven {
+            url "https://zdrepo.jfrog.io/zdrepo/repo/"
+            credentials {
+                username System.getenv().get("ARTIFACTORY_USERNAME")
+                password System.getenv().get("ARTIFACTORY_API_KEY")
+            }
+        }
+    }
+}
+
+rootProject.name = 'kafka-test'
+enableFeaturePreview("VERSION_ORDERING_V2")
